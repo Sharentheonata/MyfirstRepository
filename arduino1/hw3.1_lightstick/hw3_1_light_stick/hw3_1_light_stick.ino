@@ -6,18 +6,21 @@ const int BLedPin = 11;
 int buttonState = 0;
 bool buttonPressed = false;
 unsigned long pressingTime = 0;
-const int longPressInterval = 1000;
+const int longPressInterval = 800;
+const int debounceTime = 30;
+int lastReading = LOW;
+unsigned long lastChangeTime = 0;
+bool longPressDone = false;
 
 int currentMode = 0;
 const int modeCount = 5;
+const int secretMode = 5;
 
 int lightNum = 0;
 const int colorCount = 7;
-
 int RLightColor = 0;
 int GLightColor = 0;
 int BLightColor = 0;
-
 int RCurrentColor = 0;
 int GCurrentColor = 0;
 int BCurrentColor = 0;
@@ -35,7 +38,12 @@ int rainbowSpeedLevel = 0;
 const int rainbowSpeeds[3] = {30, 12, 4};
 
 unsigned long heartbeatStart = 0;
-const int heartbeatPeriod = 1000;           
+const int heartbeatPeriod = 1000;
+
+int clickCount = 0;
+unsigned long lastClickTime = 0;
+const int secretClicks = 5;
+const unsigned long clickGap = 500;
 
 void setup()
 {
@@ -54,30 +62,79 @@ void loop()
 }
 
 void checkButton(){
-  buttonState = digitalRead(buttonPin);
+  int reading = digitalRead(buttonPin);
+
+  if(reading != lastReading){
+    lastChangeTime = millis();
+    lastReading = reading;
+  }
+  if(millis() - lastChangeTime > debounceTime){
+    buttonState = reading;
+  }
+  else{
+    return;
+  }
 
   if(buttonState == HIGH && !buttonPressed){
     pressingTime = millis();
     buttonPressed = true;
+    longPressDone = false;
   }
-  if(buttonState == LOW && buttonPressed){
-    unsigned long currentTime = millis();
-    if(currentTime - pressingTime < longPressInterval){
-      Serial.println("short click");
-      if(currentMode == 3){
-        changeRainbowSpeed();
-      }
-      else{
-        changeLEDColor();
-      }
-    }
-    else{
+
+  if(buttonState == HIGH && buttonPressed && !longPressDone){
+    if(millis() - pressingTime >= longPressInterval){
       Serial.println("long press");
+      longPressFeedback();
       changeMode();
+      longPressDone = true;
+      clickCount = 0;
+    }
+  }
+
+  if(buttonState == LOW && buttonPressed){
+    if(!longPressDone){
+      Serial.println("short click");
+      shortClick();
     }
     buttonPressed = false;
-    delay(20);
   }
+}
+
+void shortClick(){
+  if(millis() - lastClickTime < clickGap){
+    clickCount = clickCount + 1;
+  }
+  else{
+    clickCount = 1;
+  }
+  lastClickTime = millis();
+
+  if(clickCount >= secretClicks && currentMode != secretMode){
+    enterSecretMode();
+    clickCount = 0;
+  }
+  else if(currentMode == 3){
+    changeRainbowSpeed();
+  }
+  else if(currentMode != secretMode){
+    changeLEDColor();
+  }
+}
+
+void enterSecretMode(){
+  currentMode = secretMode;
+  Serial.println("SECRET MODE: fireworks");
+}
+
+void longPressFeedback(){
+  for(int i = 0; i < 2; i++){
+    setRGBLEDColor(255, 255, 255);
+    delay(80);
+    setRGBLEDColor(0, 0, 0);
+    delay(80);
+  }
+  setRGBLEDColor(255, 255, 255);
+  delay(80);
 }
 
 void changeLEDColor(){
@@ -203,7 +260,7 @@ void updateLEDColor(){
     delay(10);
   }
   else if(currentMode == 3){
-    if(millis() - rainbowTimer > rainbowSpeeds[rainbowSpeedLevel]){
+    if(millis() - rainbowTimer > (unsigned long)rainbowSpeeds[rainbowSpeedLevel]){
       rainbowHue = (rainbowHue + 1) % 360;
       rainbowTimer = millis();
     }
@@ -218,6 +275,52 @@ void updateLEDColor(){
     RCurrentColor = 255 - (int)((255 - RLightColor) * level);
     GCurrentColor = 255 - (int)((255 - GLightColor) * level);
     BCurrentColor = 255 - (int)((255 - BLightColor) * level);
+  }
+  else if(currentMode == secretMode){
+    static unsigned long burstStart = 0;
+    static unsigned long sparkleTimer = 0;
+    static bool sparkle = false;
+    static int fr = 255, fg = 0, fb = 0;
+    static int lastColor = -1;
+    unsigned long t = millis() - burstStart;
+
+    if(t >= 1200){
+      burstStart = millis();
+      t = 0;
+      int c = random(0, 7);
+      while(c == lastColor){
+        c = random(0, 7);
+      }
+      lastColor = c;
+      if(c == 0){ fr = 255; fg = 0;   fb = 0;   }
+      if(c == 1){ fr = 0;   fg = 255; fb = 0;   }
+      if(c == 2){ fr = 0;   fg = 0;   fb = 255; }
+      if(c == 3){ fr = 255; fg = 180; fb = 0;   }
+      if(c == 4){ fr = 180; fg = 0;   fb = 255; }
+      if(c == 5){ fr = 0;   fg = 255; fb = 255; }
+      if(c == 6){ fr = 255; fg = 0;   fb = 120; }
+    }
+
+    if(millis() - sparkleTimer > 40){
+      sparkleTimer = millis();
+      sparkle = (random(0, 10) < 3);
+    }
+
+    if(t < 60){
+      RCurrentColor = 0; GCurrentColor = 0; BCurrentColor = 0;
+    }
+    else if(t < 1000){
+      float level = exp(-(float)(t - 60) / 250.0);
+      if(sparkle && t > 200){
+        level = level * 0.3;
+      }
+      RCurrentColor = 255 - (int)(fr * level);
+      GCurrentColor = 255 - (int)(fg * level);
+      BCurrentColor = 255 - (int)(fb * level);
+    }
+    else{
+      RCurrentColor = 255; GCurrentColor = 255; BCurrentColor = 255;
+    }
   }
 }
 
