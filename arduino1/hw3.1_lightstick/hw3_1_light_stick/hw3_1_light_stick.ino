@@ -1,14 +1,15 @@
 const int buttonPin = 2;
+const int PRESSED = HIGH;
 const int RLedPin = 9;
 const int GLedPin = 10;
 const int BLedPin = 11;
 
-int buttonState = 0;
+int buttonState = !PRESSED;
 bool buttonPressed = false;
 unsigned long pressingTime = 0;
-const int longPressInterval = 800;
+const int longPressInterval = 1500;
 const int debounceTime = 30;
-int lastReading = LOW;
+int lastReading = !PRESSED;
 unsigned long lastChangeTime = 0;
 bool longPressDone = false;
 
@@ -75,13 +76,13 @@ void checkButton(){
     return;
   }
 
-  if(buttonState == HIGH && !buttonPressed){
+  if(buttonState == PRESSED && !buttonPressed){
     pressingTime = millis();
     buttonPressed = true;
     longPressDone = false;
   }
 
-  if(buttonState == HIGH && buttonPressed && !longPressDone){
+  if(buttonState == PRESSED && buttonPressed && !longPressDone){
     if(millis() - pressingTime >= longPressInterval){
       Serial.println("long press");
       longPressFeedback();
@@ -91,7 +92,7 @@ void checkButton(){
     }
   }
 
-  if(buttonState == LOW && buttonPressed){
+  if(buttonState != PRESSED && buttonPressed){
     if(!longPressDone){
       Serial.println("short click");
       shortClick();
